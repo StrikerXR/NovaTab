@@ -1,0 +1,5 @@
+{
+  "name": "Firefox New Tab",
+  "description": "A premium glassmorphism new tab page replacement for Firefox with weather, clock, search, and quick links.",
+  "requestFramePermissions": ["geolocation"]
+}
