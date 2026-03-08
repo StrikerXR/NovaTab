@@ -92,9 +92,17 @@ export default function App() {
   useEffect(() => {
     const fetchWeather = async (lat, lon) => {
       try {
-        const query = lat && lon ? `${lat},${lon}` : 'London';
-        const res = await fetch(`https://api.weatherapi.com/v1/current.json?key=42712cd7a2ad47ed98131312260803&q=${query}&aqi=no`);
+        const query = (lat !== undefined && lon !== undefined) ? `${lat},${lon}` : 'London';
+        // Add a cache-buster to bypass BunnyCDN caching issues that strip CORS headers
+        const cb = new Date().getTime();
+        const res = await fetch(`https://api.weatherapi.com/v1/current.json?key=42712cd7a2ad47ed98131312260803&q=${query}&aqi=no&_cb=${cb}`);
         const data = await res.json();
+        
+        // Ensure icon URL uses https instead of protocol-relative
+        if (data?.current?.condition?.icon && data.current.condition.icon.startsWith('//')) {
+          data.current.condition.icon = 'https:' + data.current.condition.icon;
+        }
+        
         setWeather(data);
       } catch (error) {
         console.error("Weather fetch failed:", error);
