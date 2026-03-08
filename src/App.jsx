@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, ArrowRight, Settings, X } from 'lucide-react';
+import { Search, ArrowRight, Settings, X, Sun, Moon, Cloud, CloudFog, CloudLightning, CloudSnow, CloudRain } from 'lucide-react';
 
 const BACKGROUNDS = {
   nature: [
@@ -45,6 +45,15 @@ const SEARCH_ENGINES = {
   Brave: 'https://search.brave.com/search?q='
 };
 
+const getWeatherIcon = (code, isDay) => {
+  if (code === 1000) return isDay ? <Sun size={24} /> : <Moon size={24} />;
+  if ([1003, 1006, 1009].includes(code)) return <Cloud size={24} />;
+  if ([1030, 1135, 1148].includes(code)) return <CloudFog size={24} />;
+  if ([1087, 1273, 1276, 1279, 1282].includes(code)) return <CloudLightning size={24} />;
+  if ([1066, 1069, 1114, 1117, 1204, 1207, 1210, 1213, 1216, 1219, 1222, 1225, 1237, 1249, 1252, 1255, 1258, 1261, 1264].includes(code)) return <CloudSnow size={24} />;
+  return <CloudRain size={24} />;
+};
+
 export default function App() {
   const [time, setTime] = useState(new Date());
   const [bgIndex, setBgIndex] = useState(0);
@@ -63,11 +72,21 @@ export default function App() {
     }
     return {
       category: 'nature',
-      tempUnit: 'C',
+      tempUnit: 'F',
+      timeFormat: '12',
       searchEngine: 'Google',
       links: DEFAULT_LINKS
     };
   });
+
+  useEffect(() => {
+    // Ensure new settings exist for returning users
+    setSettings(prev => ({
+      ...prev,
+      timeFormat: prev.timeFormat || '12',
+      tempUnit: prev.tempUnit || 'F'
+    }));
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('newTabSettings', JSON.stringify(settings));
@@ -142,7 +161,11 @@ export default function App() {
   };
 
   const formatTime = (date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    return date.toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      hour12: settings.timeFormat === '12' 
+    });
   };
 
   const formatDate = (date) => {
@@ -202,7 +225,9 @@ export default function App() {
                   </div>
                   <div className="mt-1 flex w-full items-center justify-between text-xs text-white/70">
                     <span className="truncate">{weather.current.condition.text}</span>
-                    <img src={weather.current.condition.icon} alt="weather" className="h-6 w-6" />
+                    <div className="text-white/80">
+                      {getWeatherIcon(weather.current.condition.code, weather.current.is_day)}
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -368,6 +393,25 @@ export default function App() {
                 </div>
 
                 <div className="space-y-3">
+                  <label className="text-sm font-medium text-white/70 uppercase tracking-wider">Time Format</label>
+                  <div className="flex gap-2">
+                    {['12', '24'].map(format => (
+                      <button
+                        key={format}
+                        onClick={() => updateSetting('timeFormat', format)}
+                        className={`flex-1 rounded-xl border py-2 text-sm font-medium transition-all ${
+                          settings.timeFormat === format 
+                            ? 'border-white/50 bg-white/20 text-white' 
+                            : 'border-white/10 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                        }`}
+                      >
+                        {format}-hour
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
                   <label className="text-sm font-medium text-white/70 uppercase tracking-wider">Search Engine</label>
                   <div className="flex flex-col gap-2">
                     {Object.keys(SEARCH_ENGINES).map(engine => (
@@ -407,6 +451,18 @@ export default function App() {
                         />
                       </div>
                     ))}
+                  </div>
+                </div>
+                <div className="space-y-3 pt-6 border-t border-white/10">
+                  <label className="text-sm font-medium text-white/70 uppercase tracking-wider">Changelog</label>
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/80">
+                    <div className="font-semibold text-white mb-2">Version 26.3</div>
+                    <ul className="list-disc pl-4 space-y-1">
+                      <li>Added 12/24 hour time format toggle</li>
+                      <li>Updated weather icons to crisp vector graphics</li>
+                      <li>Changed default temperature unit to Fahrenheit</li>
+                      <li>Added this changelog section</li>
+                    </ul>
                   </div>
                 </div>
               </div>
