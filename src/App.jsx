@@ -93,6 +93,11 @@ const QUOTES = [
   "Be the change that you wish to see in the world."
 ];
 
+const COMMON_SEARCHES = [
+  "weather today", "news", "youtube", "reddit", "gmail", "github", 
+  "calculator", "translate", "maps", "speed test", "calendar", "stocks"
+];
+
 // SECTION: Helpers
 const getWeatherIcon = (shortForecast, isDay) => {
   if (!shortForecast) return <Cloud size={24} />;
@@ -124,9 +129,18 @@ export default function App() {
   const [easterEggActive, setEasterEggActive] = useState(false);
   const [easterEggMessage, setEasterEggMessage] = useState(false);
   const [confetti, setConfetti] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const versionClickCount = useRef(0);
   const versionClickTimer = useRef(null);
   const searchInputRef = useRef(null);
+  const easterEggTimeouts = useRef([]);
+
+  useEffect(() => {
+    return () => {
+      if (versionClickTimer.current) clearTimeout(versionClickTimer.current);
+      easterEggTimeouts.current.forEach(clearTimeout);
+    };
+  }, []);
 
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem('newTabSettings');
@@ -194,15 +208,21 @@ export default function App() {
         const pointsData = await pointsRes.json();
         const locationName = `${pointsData.properties.relativeLocation.properties.city}, ${pointsData.properties.relativeLocation.properties.state}`;
         const forecastHourlyUrl = pointsData.properties.forecastHourly;
+        const forecastDailyUrl = pointsData.properties.forecast;
 
-        // 2. Get hourly forecast
-        const forecastRes = await fetch(forecastHourlyUrl, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FirefoxNewTab/1.0)' }
-        });
-        if (!forecastRes.ok) throw new Error("Failed to fetch forecast");
+        // 2. Get hourly and daily forecast
+        const [forecastRes, dailyRes] = await Promise.all([
+          fetch(forecastHourlyUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FirefoxNewTab/1.0)' } }),
+          fetch(forecastDailyUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FirefoxNewTab/1.0)' } })
+        ]);
+
+        if (!forecastRes.ok || !dailyRes.ok) throw new Error("Failed to fetch forecast");
+        
         const forecastData = await forecastRes.json();
+        const dailyData = await dailyRes.json();
         
         const currentPeriod = forecastData.properties.periods[0];
+        const upcomingDays = dailyData.properties.periods.filter(p => p.isDaytime).slice(0, 3);
         
         setWeather({
           loading: false,
@@ -211,7 +231,13 @@ export default function App() {
             tempF: currentPeriod.temperature,
             tempC: Math.round((currentPeriod.temperature - 32) * 5 / 9),
             condition: currentPeriod.shortForecast,
-            isDay: currentPeriod.isDaytime
+            isDay: currentPeriod.isDaytime,
+            forecast: upcomingDays.map(day => ({
+              name: day.name.substring(0, 3),
+              tempF: day.temperature,
+              tempC: Math.round((day.temperature - 32) * 5 / 9),
+              condition: day.shortForecast
+            }))
           },
           error: null
         });
@@ -329,11 +355,11 @@ export default function App() {
     }));
     setConfetti(newConfetti);
 
-    setTimeout(() => setEasterEggMessage(false), 3000);
-    setTimeout(() => {
+    easterEggTimeouts.current.push(setTimeout(() => setEasterEggMessage(false), 3000));
+    easterEggTimeouts.current.push(setTimeout(() => {
       setEasterEggActive(false);
       setConfetti([]);
-    }, 4000);
+    }, 4000));
   };
 
   const currentBg = settings.pinnedBg || BACKGROUNDS[settings.category][bgIndex];
@@ -407,7 +433,7 @@ export default function App() {
                   initial={{ opacity: 0, x: 40 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.5, duration: settings.performanceMode ? 0 : 0.6, type: settings.performanceMode ? 'tween' : "spring" }}
-                  className={`flex w-56 flex-col items-center justify-center rounded-2xl border border-white/20 bg-white/10 p-3 ${settings.performanceMode ? '' : 'backdrop-blur-md'} shadow-lg`}
+                  className={`group flex w-56 flex-col items-center justify-center rounded-2xl border border-white/20 bg-white/10 p-3 ${settings.performanceMode ? '' : 'backdrop-blur-md'} shadow-lg transition-all hover:bg-white/20`}
                 >
                   {weather.error ? (
                     <span className="text-xs text-white/80 text-center">{weather.error}</span>
@@ -425,6 +451,21 @@ export default function App() {
                           {getWeatherIcon(weather.data.condition, weather.data.isDay)}
                         </div>
                       </div>
+                      {weather.data.forecast && weather.data.forecast.length > 0 && (
+                        <div className="mt-3 hidden w-full grid-cols-3 gap-2 border-t border-white/20 pt-3 group-hover:grid">
+                          {weather.data.forecast.map((day, i) => (
+                            <div key={i} className="flex flex-col items-center justify-center text-center">
+                              <span className="text-[10px] font-medium uppercase tracking-wider text-white/60">{day.name}</span>
+                              <div className="my-1 text-white/80 scale-75">
+                                {getWeatherIcon(day.condition, true)}
+                              </div>
+                              <span className="text-xs font-semibold text-white/90">
+                                {settings.tempUnit === 'C' ? day.tempC : day.tempF}°
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </>
                   ) : null}
                 </motion.div>
@@ -479,10 +520,41 @@ export default function App() {
               ref={searchInputRef}
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
               placeholder="Search the web... (Press / to focus)"
               className="w-full rounded-full border border-white/20 bg-white/10 py-4 pl-14 pr-14 text-lg text-white placeholder-white/50 backdrop-blur-md outline-none transition-all focus:border-white/40 focus:bg-white/20 shadow-lg"
             />
+            <AnimatePresence>
+              {showSuggestions && searchQuery && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  transition={{ duration: settings.performanceMode ? 0 : 0.2 }}
+                  className={`absolute left-0 right-0 top-full mt-2 overflow-hidden rounded-2xl border border-white/20 bg-black/60 ${settings.performanceMode ? '' : 'backdrop-blur-xl'} shadow-2xl`}
+                >
+                  {COMMON_SEARCHES.filter(s => s.includes(searchQuery.toLowerCase()) && s !== searchQuery.toLowerCase()).slice(0, 5).map((suggestion, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery(suggestion);
+                        searchInputRef.current?.focus();
+                      }}
+                      className="flex w-full items-center px-5 py-3 text-left text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+                    >
+                      <Search size={16} className="mr-3 opacity-50" />
+                      {suggestion}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
             <AnimatePresence>
               {searchQuery && (
                 <motion.button
@@ -851,10 +923,18 @@ export default function App() {
 
                 {/* Quick Links */}
                 <div className="space-y-3">
-                  <label className="text-sm font-medium text-white/70 uppercase tracking-wider">Quick Links</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-white/70 uppercase tracking-wider">Quick Links</label>
+                    <button 
+                      onClick={() => updateSetting('links', [...settings.links, { name: 'New Link', url: 'https://' }])}
+                      className="text-xs text-white/60 hover:text-white underline"
+                    >
+                      + Add Link
+                    </button>
+                  </div>
                   <div className="space-y-2">
                     {settings.links.map((link, i) => (
-                      <div key={i} className="flex gap-2">
+                      <div key={i} className="flex gap-2 items-center">
                         <input 
                           type="text" 
                           value={link.name}
@@ -869,6 +949,12 @@ export default function App() {
                           placeholder="URL"
                           className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30"
                         />
+                        <button 
+                          onClick={() => updateSetting('links', settings.links.filter((_, index) => index !== i))}
+                          className="p-2 text-white/40 hover:text-red-400 transition-colors"
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
                     ))}
                   </div>
