@@ -3,8 +3,18 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Search, ArrowRight, Settings, X, Sun, Moon, Cloud, CloudFog, CloudLightning, CloudSnow, CloudRain, Shuffle, StickyNote, Check } from 'lucide-react';
 
 // SECTION: Constants
-const VERSION = "26.3.1";
+const VERSION = "26.3.2 Beta 1.1";
 const REACT_VERSION = React.version;
+
+const CHANGELOG = [
+  "Added Performance Mode: Fully disables animations and blur for better performance.",
+  "Added Search Suggestions.",
+  "Added Custom Link Management.",
+  "Expanded Weather Widget with detailed forecast.",
+  "Fixed NetworkError in Weather Widget.",
+  "Added Full macOS Support (Cmd shortcuts, system fonts).",
+  "Updated version to 26.3.2 Beta 1.1."
+];
 
 const BACKGROUNDS = {
   nature: [
@@ -135,6 +145,7 @@ export default function App() {
       userName: '',
       showNotes: true,
       showQuote: false,
+      performanceMode: false,
       notes: ['', '', '', '', ''],
       ...parsed
     };
@@ -152,7 +163,7 @@ export default function App() {
 
   // Background Cycling
   useEffect(() => {
-    if (settings.pinnedBg) return;
+    if (settings.pinnedBg || settings.performanceMode) return;
     const intervalTime = CYCLE_INTERVALS[settings.cycleInterval];
     if (!intervalTime) return;
 
@@ -160,7 +171,7 @@ export default function App() {
       setBgIndex((prev) => (prev + 1) % BACKGROUNDS[settings.category].length);
     }, intervalTime);
     return () => clearInterval(timer);
-  }, [settings.category, settings.cycleInterval, settings.pinnedBg]);
+  }, [settings.category, settings.cycleInterval, settings.pinnedBg, settings.performanceMode]);
 
   useEffect(() => {
     if (!settings.pinnedBg) {
@@ -173,7 +184,9 @@ export default function App() {
     const fetchNWSWeather = async (lat, lon) => {
       try {
         // 1. Get grid endpoint
-        const pointsRes = await fetch(`https://api.weather.gov/points/${lat},${lon}`);
+        const pointsRes = await fetch(`https://api.weather.gov/points/${lat},${lon}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FirefoxNewTab/1.0)' }
+        });
         if (!pointsRes.ok) {
           if (pointsRes.status === 404) throw new Error("Weather available for US locations only");
           throw new Error("Failed to fetch location data");
@@ -183,7 +196,9 @@ export default function App() {
         const forecastHourlyUrl = pointsData.properties.forecastHourly;
 
         // 2. Get hourly forecast
-        const forecastRes = await fetch(forecastHourlyUrl);
+        const forecastRes = await fetch(forecastHourlyUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FirefoxNewTab/1.0)' }
+        });
         if (!forecastRes.ok) throw new Error("Failed to fetch forecast");
         const forecastData = await forecastRes.json();
         
@@ -229,7 +244,7 @@ export default function App() {
         setIsSettingsOpen(false);
         setShowShortcuts(false);
       }
-      if ((e.key === '/' || (e.ctrlKey && e.key === 'k')) && document.activeElement !== searchInputRef.current) {
+      if ((e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key === 'k')) && document.activeElement !== searchInputRef.current) {
         e.preventDefault();
         searchInputRef.current?.focus();
       }
@@ -300,7 +315,7 @@ export default function App() {
   };
 
   const triggerEasterEgg = () => {
-    if (easterEggActive) return;
+    if (easterEggActive || settings.performanceMode) return;
     setEasterEggActive(true);
     setEasterEggMessage(true);
     
@@ -327,7 +342,7 @@ export default function App() {
     <div className="relative min-h-screen w-full overflow-hidden font-['DM_Sans'] text-white selection:bg-white/30">
       <style dangerouslySetInnerHTML={{ __html: `
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,200;9..40,400;9..40,500;9..40,700&display=swap');
-        body { margin: 0; background: #000; }
+        body { margin: 0; background: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         
         @keyframes confetti-fall {
           0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
@@ -391,8 +406,8 @@ export default function App() {
                 <motion.div 
                   initial={{ opacity: 0, x: 40 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.5, duration: 0.6, type: "spring" }}
-                  className="flex w-56 flex-col items-center justify-center rounded-2xl border border-white/20 bg-white/10 p-3 backdrop-blur-md shadow-lg"
+                  transition={{ delay: 0.5, duration: settings.performanceMode ? 0 : 0.6, type: settings.performanceMode ? 'tween' : "spring" }}
+                  className={`flex w-56 flex-col items-center justify-center rounded-2xl border border-white/20 bg-white/10 p-3 ${settings.performanceMode ? '' : 'backdrop-blur-md'} shadow-lg`}
                 >
                   {weather.error ? (
                     <span className="text-xs text-white/80 text-center">{weather.error}</span>
@@ -418,7 +433,7 @@ export default function App() {
 
             <button 
               onClick={() => setIsSettingsOpen(true)}
-              className="rounded-full border border-white/20 bg-white/10 p-3 text-white/80 backdrop-blur-md transition-all hover:bg-white/20 hover:text-white shadow-lg"
+              className={`rounded-full border border-white/20 bg-white/10 p-3 text-white/80 ${settings.performanceMode ? '' : 'backdrop-blur-md'} transition-all hover:bg-white/20 hover:text-white shadow-lg`}
             >
               <Settings size={20} />
             </button>
@@ -556,7 +571,8 @@ export default function App() {
                   initial={{ height: 0, opacity: 0, marginBottom: 0 }}
                   animate={{ height: 'auto', opacity: 1, marginBottom: 16 }}
                   exit={{ height: 0, opacity: 0, marginBottom: 0 }}
-                  className="overflow-hidden rounded-2xl border border-white/20 bg-black/40 backdrop-blur-xl shadow-2xl w-64"
+                  transition={{ duration: settings.performanceMode ? 0 : 0.3 }}
+                  className={`overflow-hidden rounded-2xl border border-white/20 bg-black/40 ${settings.performanceMode ? '' : 'backdrop-blur-xl'} shadow-2xl w-64`}
                 >
                   <div className="p-4 space-y-2">
                     <h3 className="text-sm font-medium text-white/80 mb-3">Quick Notes</h3>
@@ -576,7 +592,7 @@ export default function App() {
             </AnimatePresence>
             <button
               onClick={() => updateSetting('notesOpen', !settings.notesOpen)}
-              className={`rounded-full border border-white/20 p-3 backdrop-blur-md transition-all shadow-lg ${settings.notesOpen ? 'bg-white/20 text-white' : 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'}`}
+              className={`rounded-full border border-white/20 p-3 ${settings.performanceMode ? '' : 'backdrop-blur-md'} transition-all shadow-lg ${settings.notesOpen ? 'bg-white/20 text-white' : 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'}`}
             >
               <StickyNote size={20} />
             </button>
@@ -599,8 +615,9 @@ export default function App() {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ duration: settings.performanceMode ? 0 : 0.3 }}
               onClick={e => e.stopPropagation()}
-              className="rounded-2xl border border-white/20 bg-black/60 p-6 backdrop-blur-xl shadow-2xl w-full max-w-sm"
+              className={`rounded-2xl border border-white/20 bg-black/60 p-6 ${settings.performanceMode ? '' : 'backdrop-blur-xl'} shadow-2xl w-full max-w-sm`}
             >
               <h3 className="text-lg font-medium text-white mb-4">Keyboard Shortcuts</h3>
               <div className="space-y-3">
@@ -641,8 +658,8 @@ export default function App() {
               initial={{ x: 400, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 400, opacity: 0 }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="absolute inset-y-0 right-0 z-50 w-full max-w-md border-l border-white/20 bg-black/40 p-6 backdrop-blur-xl overflow-y-auto shadow-2xl"
+              transition={{ type: settings.performanceMode ? 'tween' : 'spring', damping: 25, stiffness: 200, duration: settings.performanceMode ? 0 : 0.3 }}
+              className={`absolute inset-y-0 right-0 z-50 w-full max-w-md border-l border-white/20 bg-black/40 p-6 ${settings.performanceMode ? '' : 'backdrop-blur-xl'} overflow-y-auto shadow-2xl`}
             >
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-2xl font-medium text-white">Settings</h2>
@@ -761,11 +778,11 @@ export default function App() {
                       />
                     </label>
                     <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3 cursor-pointer hover:bg-white/10 transition-colors">
-                      <span className="text-sm text-white/80">Show Daily Quote</span>
+                      <span className="text-sm text-white/80">Performance Mode</span>
                       <input 
                         type="checkbox" 
-                        checked={settings.showQuote}
-                        onChange={(e) => updateSetting('showQuote', e.target.checked)}
+                        checked={settings.performanceMode}
+                        onChange={(e) => updateSetting('performanceMode', e.target.checked)}
                         className="accent-white/50"
                       />
                     </label>
